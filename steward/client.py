@@ -1,0 +1,1 @@
+"""get(name) for applications."""

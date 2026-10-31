@@ -1,0 +1,229 @@
+html, body, .nicegui-content {
+  background: #000;
+  color: #fff;
+  font-family: Inter, sans-serif;
+  font-weight: 400;
+  letter-spacing: -0.16px;
+}
+.nicegui-content { padding: 0 !important; }
+.nicegui-sub-pages {
+  width: 100%;
+  align-items: stretch;
+}
+.q-header {
+  background: #000 !important;
+  color: #fff;
+  border-bottom: 1px solid #252525;
+}
+.brand-lockup { gap: 6px; color: #fff; }
+.brand-mark { font-size: 16px; }
+.brand {
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.16px;
+  text-transform: none;
+}
+header a {
+  font-family: Inter, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.24px;
+  text-transform: none;
+  text-decoration: none;
+  color: #a2a2a2 !important;
+}
+header a:hover { color: #fff !important; }
+.page-title {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 12px;
+  letter-spacing: -0.12px;
+  text-transform: uppercase;
+  color: #a2a2a2;
+}
+.hint {
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 24px;
+  letter-spacing: -0.14px;
+  color: #a2a2a2;
+}
+.q-card, .q-table, .q-table__card, .q-dialog .q-card {
+  background: #0a0a0a !important;
+  color: #fff !important;
+  border: 1px solid #252525;
+  border-radius: 12px;
+  box-shadow: none;
+}
+.q-table thead tr, .q-table tbody td, .q-table th {
+  background: #0a0a0a;
+  border-color: #252525 !important;
+}
+.q-table thead tr th {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: -0.12px;
+  text-transform: uppercase;
+  color: #a2a2a2 !important;
+}
+.q-table tbody td, .q-table__bottom {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13px;
+  color: #fff !important;
+}
+.q-field--outlined .q-field__control {
+  background: #161616;
+  border-radius: 8px;
+}
+.q-field--outlined .q-field__control:before { border-color: #252525; }
+.q-field__native, .q-field__input, .q-field__label, .q-field__marginal, .q-placeholder {
+  color: #fff !important;
+  font-family: Inter, sans-serif;
+}
+html body button.q-btn.bg-primary,
+html body button.q-btn.bg-primary .block {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+html body button.q-btn.bg-primary {
+  background: #0000ee !important;
+  border-radius: 6px;
+}
+html body button.q-btn.q-btn--flat:not(.q-btn--round),
+html body button.q-btn.q-btn--flat:not(.q-btn--round) .block {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  font-family: Inter, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+html body button.q-btn.q-btn--flat:not(.q-btn--round) {
+  background: transparent !important;
+  border: 1px solid #252525;
+  border-radius: 6px;
+}
+.q-btn-toggle {
+  border: 1px solid #252525;
+  border-radius: 8px;
+  background: #0a0a0a;
+}
+html body .q-btn-toggle button.q-btn,
+html body .q-btn-toggle button.q-btn .block {
+  color: #a2a2a2 !important;
+  -webkit-text-fill-color: #a2a2a2 !important;
+  border: 0;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: -0.12px;
+  text-transform: uppercase;
+}
+html body .q-btn-toggle button.q-btn {
+  background: transparent !important;
+  border-radius: 8px;
+}
+html body .q-btn-toggle button.q-btn.bg-primary,
+html body .q-btn-toggle button.q-btn.bg-primary .block {
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+}
+html body .q-btn-toggle button.q-btn.bg-primary {
+  background: #0000ee !important;
+}
+body.desktop .q-btn > .q-focus-helper,
+body.desktop .q-btn > .q-focus-helper:before,
+body.desktop .q-btn > .q-focus-helper:after,
+body.desktop .q-btn.q-hoverable:hover > .q-focus-helper,
+body.desktop .q-btn.q-hoverable:hover > .q-focus-helper:before,
+body.desktop .q-btn.q-hoverable:hover > .q-focus-helper:after,
+body.desktop .q-btn.q-focusable:focus > .q-focus-helper,
+body.desktop .q-btn.q-focusable:focus > .q-focus-helper:before,
+body.desktop .q-btn.q-focusable:focus > .q-focus-helper:after {
+  opacity: 0 !important;
+  background: transparent !important;
+}
+.q-btn .q-ripple { display: none; }
+.q-notification.bg-positive { background: #2ecc71 !important; color: #000 !important; }
+.pick-row tr.secret-summary { cursor: pointer; }
+.pick-row tr.row-open td { background: #111; }
+.secret-expand td {
+  background: #0a0a0a !important;
+  padding-top: 4px;
+  padding-bottom: 16px;
+}
+.secret-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.secret-inline .q-field { width: 100%; }
+.grant-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.grant-fields .q-field { min-width: 0; }
+.secret-picks { display: flex; flex-direction: column; gap: 8px; }
+.secret-picks-row { display: flex; flex-wrap: wrap; gap: 8px; }
+button.secret-pick {
+  appearance: none;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid #252525;
+  border-radius: 6px;
+  background: transparent;
+  color: #a2a2a2;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 16px;
+  letter-spacing: -0.12px;
+  cursor: pointer;
+}
+button.secret-pick:hover { color: #fff; border-color: #3a3a3a; }
+button.secret-pick.on {
+  background: #161616;
+  border-color: #fff;
+  color: #fff;
+}
+button.secret-pick.on:hover { border-color: #fff; }
+button.secret-pick:focus-visible {
+  outline: 1px solid #0000ee;
+  outline-offset: 2px;
+}
+.secret-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.secret-actions-left { display: flex; gap: 8px; }
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 0;
+}
+.dialog-head .page-title { line-height: 16px; }
+html body button.q-btn.dialog-close {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0;
+}
+html body button.q-btn.dialog-close .q-icon {
+  font-size: 16px;
+}
+html body button.q-btn.secret-delete,
+html body button.q-btn.secret-delete .block {
+  color: #ff8866 !important;
+  -webkit-text-fill-color: #ff8866 !important;
+  border-color: #ff8866 !important;
+}
