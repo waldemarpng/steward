@@ -4,8 +4,11 @@ import json
 import os
 import urllib.error
 import urllib.request
+from importlib.metadata import version
 
-__all__ = ["StewardError", "fetch", "load_env"]
+__all__ = ["StewardError", "__version__", "fetch", "load_env"]
+
+__version__ = version("steward-client")
 
 _URL_ENV = "STEWARD_URL"
 _TOKEN_ENV = "STEWARD_TOKEN"

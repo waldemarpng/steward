@@ -92,5 +92,7 @@ Requires Python `>=3.14`.
 
 ```bash
 make install   # uv sync --group dev
-make check     # ruff, ty, pytest
+make check     # versions match, ruff, ty, pytest
 ```
+
+`steward` and `steward-client` share one version. `make bump PART=patch` (or `minor` / `major`) updates both and refreshes `uv.lock`.

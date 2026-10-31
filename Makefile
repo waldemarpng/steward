@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck test check hooks run admin api image up
+.PHONY: install lint format typecheck test version-check check bump hooks run admin api image up
 
 install:
 	uv sync --group dev
@@ -16,11 +16,22 @@ typecheck:
 test:
 	uv run pytest
 
-check:
+version-check:
+	@root=$$(uv version --short); \
+	client=$$(uv version --short --package steward-client); \
+	test "$$root" = "$$client" || { echo "version mismatch: steward $$root, steward-client $$client"; exit 1; }
+
+check: version-check
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run ty check
 	uv run pytest
+
+bump:
+	@test -n "$(PART)" || { echo "usage: make bump PART=patch|minor|major"; exit 1; }
+	uv version --bump "$(PART)" --frozen --no-sync
+	uv version "$$(uv version --short)" --package steward-client
+	uv version --short
 
 hooks:
 	git config core.hooksPath .githooks
