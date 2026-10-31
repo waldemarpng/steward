@@ -29,8 +29,8 @@ check: version-check
 
 bump:
 	@test -n "$(PART)" || { echo "usage: make bump PART=patch|minor|major"; exit 1; }
-	uv version --bump "$(PART)" --frozen --no-sync
-	uv version "$$(uv version --short)" --package steward-client
+	uv version --bump "$(PART)" --frozen
+	uv version "$$(uv version --short)" --package steward-client --no-sync
 	uv version --short
 
 hooks:
