@@ -4,12 +4,16 @@ from datetime import datetime
 
 from nicegui import events, ui
 
+from steward import paths
 from steward.admin.calls import Failure, call, finish, show_failure
 from steward.admin.consts import DEFAULT_EXPIRY_HOURS, EXPIRY_HOURS
-from steward.admin.present import as_names, expires_at_from, grant_row, secret_names_of, text
+from steward.admin.present import as_names, expires_at_from, grant_row, prefixes_of, secret_names_of, text
 from steward.admin.widgets import banner, confirm_delete, data_table, readonly_dialog, show_banner
 from steward.db.models import Grant, Secret
 from steward.service import Service
+
+_ROOT_KEY = paths.SEPARATOR
+_ROOT_WARNING = "The root folder gives this grant every secret, including ones added later."
 
 _COLUMNS = [
     {"name": "label", "label": "Label", "field": "label", "align": "left"},
@@ -23,27 +27,39 @@ class GrantsPage:
     def __init__(self, service: Service) -> None:
         self._service = service
         self._secret_names: list[str] = []
+        self._folders: list[str] = []
         self._by_id: dict[int, Grant] = {}
-
-    async def show(self) -> None:
         self._status = banner()
-        self._form()
+        self._label, self._names, self._prefixes, self._root_warning, self._preset, self._custom = self._form()
         self._table = data_table(columns=_COLUMNS, row_key="id").classes("pick-row")
         self._table.on("save", self._on_save)
         self._table.on("revoke", self._on_revoke)
         self._table.on("delete", self._on_delete)
         self._table.add_slot("body", _body())
+
+    async def show(self) -> None:
         await self._refresh()
 
-    def _form(self) -> None:
+    def _form(self) -> tuple[ui.input, ui.select, ui.select, ui.label, ui.toggle, ui.input]:
         with ui.card().classes("w-full p-4 gap-4"):
             ui.label("Issue").classes("page-title")
-            self._label = ui.input("Label").classes("w-full")
-            self._names = ui.select([], multiple=True, label="Secrets").classes("w-full").props("use-chips")
+            label = ui.input("Label").classes("w-full")
+            names = ui.select([], multiple=True, label="Secrets").classes("w-full").props("use-chips")
+            prefixes = (
+                ui.select({}, multiple=True, label="Folders", new_value_mode="add-unique", on_change=self._warn_root)
+                .classes("w-full")
+                .props('use-chips use-input hint="Every secret inside, now and later. Type a prefix to add one that does not exist yet."')
+            )
+            root_warning = ui.label(_ROOT_WARNING).classes("hint root-warning")
+            root_warning.set_visibility(False)
             with ui.row().classes("items-end"):
-                self._preset = ui.toggle(EXPIRY_HOURS, value=DEFAULT_EXPIRY_HOURS)
-                self._custom = ui.input("Custom expiry").props("type=datetime-local")
+                preset = ui.toggle(EXPIRY_HOURS, value=DEFAULT_EXPIRY_HOURS)
+                custom = ui.input("Custom expiry").props("type=datetime-local")
                 ui.button("Issue", on_click=self._create)
+        return label, names, prefixes, root_warning, preset, custom
+
+    def _warn_root(self) -> None:
+        self._root_warning.set_visibility(_has_root(as_names(self._prefixes.value)))
 
     async def _refresh(self) -> None:
         secrets_result = await call(self._service.list_secrets)
@@ -52,6 +68,8 @@ class GrantsPage:
         missing = self._take_secrets(secrets_result, messages)
         self._names.options = self._secret_names
         self._names.update()
+        self._prefixes.options = _prefix_options(self._folders)
+        self._prefixes.update()
         if isinstance(grants_result, Failure):
             messages.append(grants_result.message)
             missing = missing and grants_result.missing
@@ -63,10 +81,12 @@ class GrantsPage:
 
     def _take_secrets(self, result: list[Secret] | Failure, messages: list[str]) -> bool:
         self._secret_names.clear()
+        self._folders.clear()
         if isinstance(result, Failure):
             messages.append(result.message)
             return result.missing
         self._secret_names.extend(secret.name for secret in result)
+        self._folders.extend(paths.folders(self._secret_names))
         return True
 
     def _show_grants(self, grants: list[Grant]) -> None:
@@ -79,8 +99,10 @@ class GrantsPage:
         rows: list[dict[str, str | int | bool | list[str]]] = []
         for grant in grants:
             names = secret_names_of(grant)
+            prefixes = prefixes_of(grant)
             old = previous.get(grant.id, {})
             name_list = [] if names is None else names
+            prefix_list = [] if prefixes is None else [prefix or _ROOT_KEY for prefix in prefixes]
             row: dict[str, str | int | bool | list[str]] = {
                 **grant_row(grant),
                 "open": bool(old.get("open")),
@@ -88,7 +110,10 @@ class GrantsPage:
                 "expiry_draft": "",
                 "name_list": name_list,
                 "options": sorted(set(self._secret_names) | set(name_list)),
-                "names_ready": names is not None,
+                "names_ready": names is not None and prefixes is not None,
+                "prefix_list": prefix_list,
+                "prefix_options": [_ROOT_KEY, *sorted((set(self._folders) | set(prefix_list)) - {_ROOT_KEY})],
+                "prefix_draft": "",
             }
             rows.append(row)
         return rows
@@ -114,7 +139,9 @@ class GrantsPage:
             return
         names = payload.get("names")
         if isinstance(names, list):
-            named = await call(lambda: self._service.set_grant_secrets(grant_id, [str(item) for item in names]))
+            raw_prefixes = payload.get("prefixes")
+            prefixes = [str(item) for item in raw_prefixes] if isinstance(raw_prefixes, list) else None
+            named = await call(lambda: self._service.set_grant_secrets(grant_id, [str(item) for item in names], prefixes))
             if isinstance(named, Failure):
                 show_failure(named)
                 return
@@ -145,13 +172,16 @@ class GrantsPage:
         deadline = self._deadline()
         if deadline is None:
             return
-        created = await call(lambda: self._service.create_grant(label, as_names(self._names.value), deadline))
+        created = await call(
+            lambda: self._service.create_grant(label, as_names(self._names.value), deadline, as_names(self._prefixes.value))
+        )
         if isinstance(created, Failure):
             show_failure(created)
             return
         _grant, token = created
         self._label.value = ""
         self._names.value = []
+        self._prefixes.value = []
         self._custom.value = ""
         readonly_dialog("Grant token", token, hint="It will not be shown again.")
         await self._refresh()
@@ -191,16 +221,40 @@ def _grant_id(payload: dict) -> int | None:
     return None
 
 
+def _prefix_options(folders: list[str]) -> dict[str, str]:
+    """Select options: the root first, then every existing folder, shown as ``prod/*``."""
+    return {_ROOT_KEY: paths.prefix_label(paths.ROOT), **{folder: paths.prefix_label(folder) for folder in folders}}
+
+
+def _has_root(prefixes: list[str]) -> bool:
+    """Whether any chosen prefix is the root."""
+    return any(not prefix.strip().strip(paths.SEPARATOR) for prefix in prefixes)
+
+
 def _send(event: str, payload: str) -> str:
     return f"($parent.$refs.qRef||$parent.$parent.$refs.qRef).$emit('{event}',{payload})"
 
 
 def _body() -> str:
-    fields = "{id:props.row.id,label:props.row.label_draft,expiry:props.row.expiry_draft,names:props.row.names_ready ? props.row.name_list : null}"
+    fields = (
+        "{id:props.row.id,label:props.row.label_draft,expiry:props.row.expiry_draft,"
+        "names:props.row.names_ready ? props.row.name_list : null,"
+        "prefixes:props.row.names_ready ? props.row.prefix_list : null}"
+    )
     identity = "{id:props.row.id}"
     save = _send("save", fields)
     revoke = _send("revoke", identity)
     delete = _send("delete", identity)
+    toggle_prefix = (
+        "props.row.prefix_list.includes(prefix) ? props.row.prefix_list.splice(props.row.prefix_list.indexOf(prefix), 1)"
+        " : props.row.prefix_list.push(prefix)"
+    )
+    add_prefix = (
+        "(() => { const p = (props.row.prefix_draft || '').trim().replace(/^\\/+|\\/+$/g, '') || '/';"
+        " if (!props.row.prefix_options.includes(p)) props.row.prefix_options.push(p);"
+        " if (!props.row.prefix_list.includes(p)) props.row.prefix_list.push(p);"
+        " props.row.prefix_draft = ''; })()"
+    )
     return f"""
         <q-tr :props="props" class="secret-summary" :class="props.row.open ? 'row-open' : ''"
               @click="props.row.open = !props.row.open">
@@ -212,6 +266,25 @@ def _body() -> str:
                     <div class="grant-fields">
                         <q-input dense outlined dark label="Label" v-model="props.row.label_draft" />
                         <q-input dense outlined dark label="New expiry" type="datetime-local" v-model="props.row.expiry_draft" />
+                    </div>
+                    <div v-if="props.row.names_ready" class="secret-picks" @click.stop>
+                        <div class="page-title">Folders</div>
+                        <div class="secret-picks-row">
+                            <button v-for="prefix in props.row.prefix_options" :key="prefix" type="button"
+                                    class="secret-pick" role="checkbox"
+                                    :aria-checked="props.row.prefix_list.includes(prefix)"
+                                    :class="{{on: props.row.prefix_list.includes(prefix)}}"
+                                    @click.stop="{toggle_prefix}">
+                                {{{{ prefix === '/' ? '/*' : prefix + '/*' }}}}
+                            </button>
+                        </div>
+                        <q-input dense outlined dark label="Add folder prefix" v-model="props.row.prefix_draft"
+                                 @keydown.enter.prevent="{add_prefix}">
+                            <template v-slot:append>
+                                <q-icon class="cursor-pointer" name="add" @click.stop="{add_prefix}" />
+                            </template>
+                        </q-input>
+                        <div v-if="props.row.prefix_list.includes('/')" class="hint root-warning">{_ROOT_WARNING}</div>
                     </div>
                     <div v-if="props.row.names_ready" class="secret-picks" @click.stop>
                         <div class="page-title">Secrets</div>

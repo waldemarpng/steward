@@ -55,6 +55,21 @@ class Grant(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     secrets: Mapped[list[Secret]] = relationship(secondary=grant_secrets, back_populates="grants", lazy="selectin")
+    prefixes: Mapped[list[GrantPrefix]] = relationship(
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        lazy="selectin",
+        order_by="GrantPrefix.prefix",
+    )
+
+
+class GrantPrefix(Base):
+    """Folder a grant can read, at any depth. ``""`` is the root: every secret."""
+
+    __tablename__ = "grant_prefixes"
+
+    grant_id: Mapped[int] = mapped_column(ForeignKey("grants.id", ondelete="CASCADE"), primary_key=True)
+    prefix: Mapped[str] = mapped_column(String, primary_key=True)
 
 
 class Audit(Base):

@@ -241,7 +241,6 @@ html body button.q-btn.secret-delete,
 html body button.q-btn.secret-delete .block {
   color: #ff8866 !important;
   -webkit-text-fill-color: #ff8866 !important;
-  border-color: #ff8866 !important;
 }
 .q-dialog .q-card.paste-dialog {
   width: min(720px, calc(100vw - 48px));
@@ -253,3 +252,7 @@ html body button.q-btn.secret-delete .block {
   font-size: 13px;
   line-height: 20px;
 }
+.crumbs { display: flex; align-items: center; gap: 4px; }
+html body .crumbs button.q-btn.crumb { padding: 2px 6px; min-height: 0; font-family: "IBM Plex Mono", monospace; }
+.folder-row .folder-icon { color: #a2a2a2; margin-right: 6px; }
+.root-warning { color: #ffaa00; }

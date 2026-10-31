@@ -21,20 +21,21 @@ class AuditPage:
         self._service = service
         self._loaded: list[dict[str, str | int]] = []
         self._ready = False
-
-    async def show(self) -> None:
         self._status = banner()
-        self._filters()
+        self._outcome, self._limit = self._filters()
         self._table = data_table(columns=_COLUMNS, row_key="id")
         self._ready = True
+
+    async def show(self) -> None:
         await self._refresh()
 
-    def _filters(self) -> None:
+    def _filters(self) -> tuple[ui.select, ui.number]:
         with ui.row().classes("items-end"):
-            self._outcome = ui.select({"all": "all", **OUTCOME_LABELS}, value="all", label="Outcome", on_change=self._apply_filter)
-            self._outcome.classes("w-56")
-            self._limit = ui.number("Rows", value=AUDIT_ROW_DEFAULT, min=1, max=AUDIT_ROW_MAX).classes("w-32")
+            outcome = ui.select({"all": "all", **OUTCOME_LABELS}, value="all", label="Outcome", on_change=self._apply_filter)
+            outcome.classes("w-56")
+            limit = ui.number("Rows", value=AUDIT_ROW_DEFAULT, min=1, max=AUDIT_ROW_MAX).classes("w-32")
             ui.button("Show", on_click=self._refresh)
+        return outcome, limit
 
     def _apply_filter(self) -> None:
         if not self._ready:

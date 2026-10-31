@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from steward import formats
+from steward import formats, paths
 from steward.db import crypto, make_session_factory, queries
 from steward.db.models import Audit, Grant, Secret
 from steward.errors import SecretExists
@@ -16,20 +16,30 @@ class Service:
         self._factory = factory or make_session_factory()
 
     async def create_secret(self, name: str, value: str, note: str = "") -> Secret:
-        """Store a secret. The value is encrypted before it is written."""
+        """Store a secret at a path. The value is encrypted before it is written.
+
+        Raises ValueError for a bad path, or when a grant with a covering prefix would read two secrets with one short name.
+        """
+        name = paths.normalize_path(name)
         async with self._factory.begin() as session:
             if await queries.get_secret(session, name) is not None:
                 raise SecretExists(name)
-            return await queries.create_secret(session, name, value, note)
+            secret = await queries.create_secret(session, name, value, note)
+            await queries.check_new_paths(session, [secret.name])
+            return secret
 
-    async def import_env(self, source: str) -> list[Secret]:
-        """Store every KEY=value line in one transaction. An existing name keeps its note.
+    async def import_env(self, source: str, folder: str = "") -> list[Secret]:
+        """Store every KEY=value line inside folder in one transaction. An existing path keeps its note.
 
-        Raises ValueError before anything is written when a line cannot be read.
+        Raises ValueError before anything is written when a line cannot be read, the folder is bad,
+        or a grant would read two secrets with one short name.
         """
         values = formats.parse_env(source)
+        folder = paths.normalize_prefix(folder)
         async with self._factory.begin() as session:
-            return [await queries.put_secret(session, name, value) for name, value in values.items()]
+            saved = [await queries.put_secret(session, paths.join(folder, name), value) for name, value in values.items()]
+            await queries.check_new_paths(session, [secret.name for secret in saved])
+            return saved
 
     async def list_secrets(self) -> list[Secret]:
         """Secrets, ordered by name."""
@@ -54,11 +64,22 @@ class Service:
         async with self._factory.begin() as session:
             return await queries.delete_secret(session, name)
 
-    async def create_grant(self, label: str, secret_names: list[str], expires_at: datetime) -> tuple[Grant, str]:
-        """Issue a grant. The token is returned once and is not stored."""
+    async def delete_folder(self, prefix: str) -> list[str]:
+        """Delete every secret inside the folder. Paths removed. Grant prefixes stay. Raises ValueError for the root."""
+        async with self._factory.begin() as session:
+            return await queries.delete_folder(session, prefix)
+
+    async def create_grant(
+        self,
+        label: str,
+        secret_names: list[str],
+        expires_at: datetime,
+        prefixes: list[str] | None = None,
+    ) -> tuple[Grant, str]:
+        """Issue a grant on secrets and folder prefixes. The token is returned once and is not stored."""
         token = secrets.token_urlsafe(32)
         async with self._factory.begin() as session:
-            grant = await queries.create_grant(session, label, token, secret_names, expires_at)
+            grant = await queries.create_grant(session, label, token, secret_names, expires_at, prefixes)
             return grant, token
 
     async def list_grants(self) -> list[Grant]:
@@ -71,10 +92,10 @@ class Service:
         async with self._factory.begin() as session:
             return await queries.update_grant(session, grant_id, label=label, expires_at=expires_at)
 
-    async def set_grant_secrets(self, grant_id: int, secret_names: list[str]) -> Grant | None:
-        """Replace the secret names on a grant. None when the grant is missing."""
+    async def set_grant_secrets(self, grant_id: int, secret_names: list[str], prefixes: list[str] | None = None) -> Grant | None:
+        """Replace the secret names on a grant, and the prefixes unless prefixes is None. None when the grant is missing."""
         async with self._factory.begin() as session:
-            return await queries.set_grant_secrets(session, grant_id, secret_names)
+            return await queries.set_grant_secrets(session, grant_id, secret_names, prefixes)
 
     async def revoke_grant(self, grant_id: int) -> Grant | None:
         """Revoke a grant. None when the grant is missing."""
@@ -87,35 +108,40 @@ class Service:
             return await queries.delete_grant(session, grant_id)
 
     async def issue(self, token: str, name: str) -> str | None:
-        """Return the secret value for a token and name, and record the outcome."""
+        """Return the secret value for a token and full path, and record the outcome."""
         async with self._factory.begin() as session:
             grant = await queries.get_grant_by_token(session, token)
             if grant is None:
                 await _audit(session, name=name, outcome="unknown_token")
                 return None
-            secret = next((item for item in grant.secrets if item.name == name), None)
+            stored = await queries.get_secret(session, name)
+            readable = stored is not None and _reads(grant, stored)
             denial = _denial(grant)
             if denial is not None:
                 outcome = denial
-            elif secret is None:
-                stored = await queries.get_secret(session, name)
-                outcome = "unknown_name" if stored is None else "not_in_grant"
+            elif stored is None:
+                outcome = "unknown_name"
+            elif not readable:
+                outcome = "not_in_grant"
             else:
                 outcome = "ok"
             await _audit(session, name=name, outcome=outcome, grant=grant)
-            if secret is None or outcome != "ok":
+            if stored is None or outcome != "ok":
                 return None
-            return crypto.decrypt(secret.value)
+            return crypto.decrypt(stored.value)
 
     async def issue_available(self, token: str) -> dict[str, str] | None:
-        """Decrypted secrets on a live grant, by name. None when the token cannot be used."""
+        """Decrypted secrets on a live grant, by short name. None when the token cannot be used.
+
+        Audit rows keep the full path.
+        """
         async with self._factory.begin() as session:
             grant = await queries.get_grant_by_token(session, token)
             if grant is None:
                 await _audit(session, name="", outcome="unknown_token")
                 return None
             denial = _denial(grant)
-            ordered = sorted(grant.secrets, key=lambda item: item.name)
+            ordered = await queries.grant_reach(session, grant)
             if denial is not None:
                 names = [item.name for item in ordered] or [""]
                 for name in names:
@@ -123,12 +149,17 @@ class Service:
                 return None
             for item in ordered:
                 await _audit(session, name=item.name, outcome="ok", grant=grant)
-            return {item.name: crypto.decrypt(item.value) for item in ordered}
+            return {paths.short_name(item.name): crypto.decrypt(item.value) for item in ordered}
 
     async def list_audit(self, limit: int = 100) -> list[Audit]:
         """Audit rows, newest first."""
         async with self._factory.begin() as session:
             return await queries.list_audit(session, limit)
+
+
+def _reads(grant: Grant, secret: Secret) -> bool:
+    """Whether the grant links the secret or has a prefix that covers it."""
+    return any(item.id == secret.id for item in grant.secrets) or any(paths.covers(item.prefix, secret.name) for item in grant.prefixes)
 
 
 def _denial(grant: Grant) -> str | None:

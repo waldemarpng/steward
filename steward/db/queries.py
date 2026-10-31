@@ -5,17 +5,17 @@ Secret values are encrypted here. The value column stores ciphertext only.
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from steward import paths
 from steward.db.crypto import decrypt, encrypt, hash_token
-from steward.db.models import AUDIT_OUTCOMES, Audit, Grant, Secret, utcnow
+from steward.db.models import AUDIT_OUTCOMES, Audit, Grant, GrantPrefix, Secret, utcnow
 
 
 async def create_secret(session: AsyncSession, name: str, value: str, note: str = "") -> Secret:
-    """Encrypted secret row. Raises ValueError when the name is empty."""
-    if not name:
-        raise ValueError("name is empty")
+    """Encrypted secret row. Raises ValueError when the path is empty or invalid."""
+    name = paths.normalize_path(name)
     now = utcnow()
     secret = Secret(name=name, value=encrypt(value), note=note, created_at=now, updated_at=now)
     session.add(secret)
@@ -69,6 +69,7 @@ async def update_secret(
 
 async def put_secret(session: AsyncSession, name: str, value: str) -> Secret:
     """Create the secret, or replace the value of an existing one and keep its note."""
+    name = paths.normalize_path(name)
     secret = await get_secret(session, name)
     if secret is None:
         return await create_secret(session, name, value)
@@ -88,14 +89,47 @@ async def delete_secret(session: AsyncSession, name: str) -> bool:
     return True
 
 
+async def list_secrets_under(session: AsyncSession, prefix: str) -> list[Secret]:
+    """Secrets inside the folder prefix at any depth, ordered by name. ``""`` is every secret."""
+    return await _secrets_under(session, [prefix])
+
+
+async def _secrets_under(session: AsyncSession, prefixes: list[str]) -> list[Secret]:
+    """Secrets inside any of the prefixes, ordered by name.
+
+    LIKE ignores case in SQLite, so it only narrows the rows and ``paths.covers`` decides.
+    """
+    statement = select(Secret).order_by(Secret.name)
+    if paths.ROOT not in prefixes:
+        statement = statement.where(or_(*(Secret.name.startswith(prefix + paths.SEPARATOR, autoescape=True) for prefix in prefixes)))
+    result = await session.scalars(statement)
+    return [secret for secret in result.all() if any(paths.covers(prefix, secret.name) for prefix in prefixes)]
+
+
+async def delete_folder(session: AsyncSession, prefix: str) -> list[str]:
+    """Paths removed from inside the folder. Raises ValueError for the root. Grant prefixes stay."""
+    prefix = paths.normalize_prefix(prefix)
+    if not prefix:
+        raise ValueError("the root folder cannot be deleted")
+    removed = await list_secrets_under(session, prefix)
+    for secret in removed:
+        await session.delete(secret)
+    await session.flush()
+    return [secret.name for secret in removed]
+
+
 async def create_grant(
     session: AsyncSession,
     label: str,
     token: str,
     secret_names: list[str],
     expires_at: datetime,
+    prefixes: list[str] | None = None,
 ) -> Grant:
-    """Stored grant. The token is hashed and not kept. Raises ValueError for an empty token or an unknown secret name."""
+    """Stored grant. The token is hashed and not kept.
+
+    Raises ValueError for an empty token, an unknown secret name, a bad prefix, or two secrets with one short name.
+    """
     if not token:
         raise ValueError("token is empty")
     grant = Grant(
@@ -105,9 +139,11 @@ async def create_grant(
         revoked_at=None,
         created_at=utcnow(),
         secrets=await _secrets_by_names(session, secret_names),
+        prefixes=[GrantPrefix(prefix=prefix) for prefix in _prefixes(prefixes or [])],
     )
     session.add(grant)
     await session.flush()
+    await check_short_names(session, [grant])
     return grant
 
 
@@ -146,14 +182,60 @@ async def update_grant(
     return grant
 
 
-async def set_grant_secrets(session: AsyncSession, grant_id: int, secret_names: list[str]) -> Grant | None:
-    """Grant with its secret list replaced, or None when the id is missing."""
+async def set_grant_secrets(
+    session: AsyncSession,
+    grant_id: int,
+    secret_names: list[str],
+    prefixes: list[str] | None = None,
+) -> Grant | None:
+    """Grant with its secret list replaced, and its prefixes too unless prefixes is None. None when the id is missing.
+
+    Raises ValueError for an unknown secret name, a bad prefix, or two secrets with one short name.
+    """
     grant = await get_grant(session, grant_id)
     if grant is None:
         return None
     grant.secrets = await _secrets_by_names(session, secret_names)
+    if prefixes is not None:
+        wanted = _prefixes(prefixes)
+        kept = [item for item in grant.prefixes if item.prefix in wanted]
+        known = {item.prefix for item in kept}
+        grant.prefixes = kept + [GrantPrefix(prefix=prefix) for prefix in wanted if prefix not in known]
     await session.flush()
+    await check_short_names(session, [grant])
     return grant
+
+
+async def grant_reach(session: AsyncSession, grant: Grant) -> list[Secret]:
+    """Secrets the grant can read: linked ones and every one under its prefixes, ordered by name."""
+    found = {secret.id: secret for secret in grant.secrets}
+    prefixes = [item.prefix for item in grant.prefixes]
+    if prefixes:
+        for secret in await _secrets_under(session, prefixes):
+            found.setdefault(secret.id, secret)
+    return sorted(found.values(), key=lambda secret: secret.name)
+
+
+async def check_short_names(session: AsyncSession, grants: list[Grant]) -> None:
+    """Raise ValueError when a grant that is not revoked would read two secrets with one short name."""
+    for grant in grants:
+        if grant.revoked_at is not None:
+            continue
+        seen: dict[str, str] = {}
+        for secret in await grant_reach(session, grant):
+            short = paths.short_name(secret.name)
+            if short in seen:
+                raise ValueError(f'grant "{grant.label}" would read two secrets named "{short}": {seen[short]}, {secret.name}')
+            seen[short] = secret.name
+
+
+async def check_new_paths(session: AsyncSession, names: list[str]) -> None:
+    """Short-name check for every grant whose prefixes cover one of the new paths."""
+    if not names:
+        return
+    result = await session.scalars(select(Grant).where(Grant.prefixes.any()))
+    affected = [grant for grant in result.all() if any(paths.covers(item.prefix, name) for item in grant.prefixes for name in names)]
+    await check_short_names(session, affected)
 
 
 async def revoke_grant(session: AsyncSession, grant_id: int, at: datetime | None = None) -> Grant | None:
@@ -219,3 +301,8 @@ async def _secrets_by_names(session: AsyncSession, names: list[str]) -> list[Sec
         joined = ", ".join(missing)
         raise ValueError(f"unknown secrets: {joined}")
     return found
+
+
+def _prefixes(prefixes: list[str]) -> list[str]:
+    """Normalized, unique prefixes in their first order. Raises ValueError for a bad one."""
+    return list(dict.fromkeys(paths.normalize_prefix(prefix) for prefix in prefixes))
