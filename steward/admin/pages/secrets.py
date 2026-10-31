@@ -187,10 +187,9 @@ class SecretsPage:
         await self._refresh()
 
     def _open_import(self) -> None:
-        paste_dialog(f"Import .env into {_where(self._folder)}", self._import)
+        paste_dialog("Import .env", self._import, folder=self._folder)
 
-    async def _import(self, source: str) -> bool:
-        folder = self._folder
+    async def _import(self, source: str, folder: str) -> bool:
         saved = await call(lambda: self._service.import_env(source, folder))
         if isinstance(saved, Failure):
             show_failure(saved)

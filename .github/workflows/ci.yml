@@ -27,3 +27,18 @@ jobs:
 
       - run: uv sync --frozen --group dev
       - run: make check
+
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.11"
+
+      - run: uv venv --no-project --python 3.11 /tmp/steward-client
+      - run: uv pip install --python /tmp/steward-client/bin/python pytest pytest-asyncio ./steward-client
+      - run: /tmp/steward-client/bin/pytest steward-client/tests

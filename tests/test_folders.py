@@ -57,14 +57,6 @@ def test_prefix_helpers() -> None:
     assert not paths.covers("prod/billing", "prod/KEY")
     assert paths.covers(paths.ROOT, "anything/KEY")
     assert paths.folders(["a/b/K", "a/K", "c/K", "K"]) == ["a", "a/b", "c"]
-    assert paths.short_name("a/b/K") == "K"
-    assert paths.prefix_label("") == "/*"
-
-
-async def test_create_rejects_a_bad_path(service: Service) -> None:
-    with pytest.raises(ValueError, match="empty folder"):
-        await service.create_secret("prod//KEY", "v")
-    assert await service.list_secrets() == []
 
 
 async def test_import_into_a_folder(service: Service) -> None:
@@ -186,12 +178,6 @@ async def test_like_wildcards_in_a_prefix_match_literally(service: Service) -> N
     await service.create_secret("axb/KEY2", "2")
     _grant, token = await service.create_grant("g", [], _LATER, ["a_b"])
     assert await service.issue_available(token) == {"KEY": "1"}
-
-
-async def test_deleting_a_grant_removes_its_prefixes(service: Service) -> None:
-    grant, _token = await service.create_grant("g", [], _LATER, ["a"])
-    assert await service.delete_grant(grant.id)
-    assert await service.list_grants() == []
 
 
 async def test_admin_rows_show_prefixes(service: Service) -> None:

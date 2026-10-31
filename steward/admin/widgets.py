@@ -55,16 +55,24 @@ def readonly_dialog(title: str, value: str, *, hint: str = "") -> None:
     dialog.open()
 
 
-def paste_dialog(title: str, on_save: Callable[[str], Awaitable[bool]], *, placeholder: str = "") -> None:
-    """Open a dialog with a large text field. It closes when on_save returns True."""
+def paste_dialog(
+    title: str,
+    on_save: Callable[[str, str], Awaitable[bool]],
+    *,
+    placeholder: str = "",
+    folder: str = "",
+) -> None:
+    """Open a dialog with a folder and a large text field. It closes when on_save returns True."""
     with ui.dialog() as dialog, ui.card().classes("p-4 gap-3 paste-dialog"):
         with ui.row().classes("dialog-head"):
             ui.label(title).classes("page-title")
             ui.button(icon="close", on_click=dialog.close).props(QUIET).classes("dialog-close")
+        folder_input = ui.input("Folder", value=folder, placeholder="prod/billing").props("outlined dark").classes("w-full")
+        ui.label("Each key is saved inside this folder. Leave it empty for the root.").classes("hint")
         source = ui.textarea(placeholder=placeholder).props("outlined dark spellcheck=false").classes("w-full paste-source")
 
         async def save() -> None:
-            if await on_save(source.value or ""):
+            if await on_save(source.value or "", folder_input.value or ""):
                 dialog.close()
 
         with ui.row():

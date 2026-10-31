@@ -35,9 +35,15 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 @contextmanager
-def broker(*, payload: object = {"DATABASE_URL": "s3cret"}, status: int = 200) -> Generator[str]:
+def broker(*, payload: object = {"DATABASE_URL": "s3cret"}, status: int = 200, location: str | None = None) -> Generator[str]:
     class Handler(_Handler):
-        pass
+        def do_GET(self) -> None:
+            if location is None:
+                super().do_GET()
+                return
+            self.send_response(302)
+            self.send_header("Location", location)
+            self.end_headers()
 
     Handler.payload = payload
     Handler.status = status
@@ -105,6 +111,71 @@ def test_non_string_value_is_rejected() -> None:
 def test_broker_error_status_is_rejected() -> None:
     with broker(status=500) as url, pytest.raises(StewardError, match="broker returned 500"):
         fetch(url=url, token="secret")
+
+
+def test_redirect_is_not_followed() -> None:
+    seen: list[str | None] = []
+
+    class Sink(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            seen.append(self.headers.get("Authorization"))
+            body = b'{"STOLEN": "yes"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    sink = ThreadingHTTPServer(("127.0.0.1", 0), Sink)
+    thread = threading.Thread(target=sink.serve_forever, daemon=True)
+    thread.start()
+    host, port, *_rest = sink.server_address
+    try:
+        with (
+            broker(location=f"http://{host}:{port}/secrets.json") as url,
+            pytest.raises(StewardError, match="broker redirected"),
+        ):
+            fetch(url=url, token="secret")
+    finally:
+        sink.shutdown()
+        sink.server_close()
+        thread.join(timeout=2)
+    assert seen == []
+
+
+def test_fetch_ignores_proxy_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+
+    class Proxy(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            seen.append(self.path)
+            self.send_error(500)
+
+        def log_message(self, format: str, *args: object) -> None:
+            return
+
+    proxy = ThreadingHTTPServer(("127.0.0.1", 0), Proxy)
+    thread = threading.Thread(target=proxy.serve_forever, daemon=True)
+    thread.start()
+    host, port, *_rest = proxy.server_address
+    proxy_url = f"http://{host}:{port}"
+    monkeypatch.setenv("HTTP_PROXY", proxy_url)
+    monkeypatch.setenv("http_proxy", proxy_url)
+    monkeypatch.setenv("HTTPS_PROXY", proxy_url)
+    monkeypatch.setenv("https_proxy", proxy_url)
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    try:
+        with broker() as url:
+            assert fetch(url=url, token="secret") == {"DATABASE_URL": "s3cret"}
+    finally:
+        proxy.shutdown()
+        proxy.server_close()
+        thread.join(timeout=2)
+    assert seen == []
 
 
 def test_load_env_sets_missing_names(restored_environ: None) -> None:

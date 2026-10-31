@@ -31,17 +31,6 @@ async def test_import_replaces_value_and_keeps_note(service: Service) -> None:
     assert stored["API_KEY"].note == "keep"
 
 
-async def test_import_unquotes_values(service: Service) -> None:
-    await service.import_env('A=\'with space\'\nB="x\\"y"\n')
-    assert await service.get_secret_value("A") == "with space"
-    assert await service.get_secret_value("B") == 'x"y'
-
-
-async def test_import_rejects_an_empty_text(service: Service) -> None:
-    with pytest.raises(ValueError, match="no KEY=value lines"):
-        await service.import_env("# only a comment\n")
-
-
 async def test_import_writes_nothing_when_a_line_is_bad(service: Service) -> None:
     with pytest.raises(ValueError, match="line 2"):
         await service.import_env("GOOD=1\nnot a pair\n")

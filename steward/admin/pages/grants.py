@@ -250,10 +250,10 @@ def _body() -> str:
         " : props.row.prefix_list.push(prefix)"
     )
     add_prefix = (
-        "(() => { const p = (props.row.prefix_draft || '').trim().replace(/^\\/+|\\/+$/g, '') || '/';"
+        "{ const p = (props.row.prefix_draft || '').trim().replace(/^\\/+|\\/+$/g, '') || '/';"
         " if (!props.row.prefix_options.includes(p)) props.row.prefix_options.push(p);"
         " if (!props.row.prefix_list.includes(p)) props.row.prefix_list.push(p);"
-        " props.row.prefix_draft = ''; })()"
+        " props.row.prefix_draft = ''; }"
     )
     return f"""
         <q-tr :props="props" class="secret-summary" :class="props.row.open ? 'row-open' : ''"
