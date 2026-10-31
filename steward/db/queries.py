@@ -67,6 +67,17 @@ async def update_secret(
     return secret
 
 
+async def put_secret(session: AsyncSession, name: str, value: str) -> Secret:
+    """Create the secret, or replace the value of an existing one and keep its note."""
+    secret = await get_secret(session, name)
+    if secret is None:
+        return await create_secret(session, name, value)
+    secret.value = encrypt(value)
+    secret.updated_at = utcnow()
+    await session.flush()
+    return secret
+
+
 async def delete_secret(session: AsyncSession, name: str) -> bool:
     """True when a row was removed."""
     secret = await get_secret(session, name)

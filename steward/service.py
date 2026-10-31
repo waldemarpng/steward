@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from steward import formats
 from steward.db import crypto, make_session_factory, queries
 from steward.db.models import Audit, Grant, Secret
 from steward.errors import SecretExists
@@ -20,6 +21,15 @@ class Service:
             if await queries.get_secret(session, name) is not None:
                 raise SecretExists(name)
             return await queries.create_secret(session, name, value, note)
+
+    async def import_env(self, source: str) -> list[Secret]:
+        """Store every KEY=value line in one transaction. An existing name keeps its note.
+
+        Raises ValueError before anything is written when a line cannot be read.
+        """
+        values = formats.parse_env(source)
+        async with self._factory.begin() as session:
+            return [await queries.put_secret(session, name, value) for name, value in values.items()]
 
     async def list_secrets(self) -> list[Secret]:
         """Secrets, ordered by name."""

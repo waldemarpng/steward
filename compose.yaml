@@ -2,7 +2,7 @@ services:
   steward:
     build: .
     ports:
-      - "8080:8080"
-      - "8081:8081"
+      - "18080:8080"
+      - "18081:8081"
     environment:
       STEWARD_MASTER_KEY: ${STEWARD_MASTER_KEY:-test}

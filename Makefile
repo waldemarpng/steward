@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck test version-check check bump hooks run admin api image up
+.PHONY: install lint format typecheck test version-check check bump hooks run admin api image up run-d
 
 install:
 	uv sync --group dev
@@ -49,5 +49,5 @@ api:
 image:
 	docker build -t steward .
 
-up:
-	docker compose up --build
+up run-d:
+	docker compose up --build -d

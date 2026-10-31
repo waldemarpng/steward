@@ -4,7 +4,7 @@ from nicegui import events, ui
 
 from steward.admin.calls import Failure, call, finish, show_failure
 from steward.admin.present import secret_delete_warning, secret_row, text
-from steward.admin.widgets import banner, confirm_delete, data_table, password_input, readonly_dialog, show_banner
+from steward.admin.widgets import QUIET, banner, confirm_delete, data_table, password_input, paste_dialog, readonly_dialog, show_banner
 from steward.db.models import Secret
 from steward.service import Service
 
@@ -34,11 +34,12 @@ class SecretsPage:
     def _form(self) -> None:
         with ui.card().classes("w-full p-4 gap-4"):
             ui.label("New").classes("page-title")
-            with ui.row().classes("w-full items-end"):
-                self._name = ui.input("Name").classes("w-48")
-                self._value = password_input("Value").classes("w-72")
-                self._note = ui.input("Note").classes("grow")
+            with ui.element("div").classes("new-secret"):
+                self._name = ui.input("Name")
+                self._value = password_input("Value")
+                self._note = ui.input("Note")
                 ui.button("Save", on_click=self._create)
+                ui.button("Import .env", on_click=self._open_import).props(QUIET)
 
     async def _refresh(self) -> None:
         result = await call(self._service.list_secrets)
@@ -111,6 +112,18 @@ class SecretsPage:
         self._note.value = ""
         ui.notify(f'Secret "{created.name}" saved', type="positive")
         await self._refresh()
+
+    def _open_import(self) -> None:
+        paste_dialog("Import .env", self._import)
+
+    async def _import(self, source: str) -> bool:
+        saved = await call(lambda: self._service.import_env(source))
+        if isinstance(saved, Failure):
+            show_failure(saved)
+            return False
+        ui.notify(f"Saved {len(saved)} secret(s): {', '.join(secret.name for secret in saved)}", type="positive")
+        await self._refresh()
+        return True
 
     async def _save(self, name: str, note: str | None, value: str | None) -> None:
         updated = await call(lambda: self._service.update_secret(name, value=value or None, note=note))

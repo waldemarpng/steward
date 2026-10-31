@@ -22,13 +22,15 @@ curl http://127.0.0.1:8080/health
 ## Docker
 
 ```bash
-make up
+make run-d
 ```
 
-Admin and API stay on ports 8081 and 8080. The image listens on `0.0.0.0`. The database file is `/app/data/steward.db` inside the container. It remains across `docker stop` and `docker start`. A new container starts with an empty database.
+`make run-d` is `docker compose up --build -d`. `make up` does the same. `make run -d` is not that command: `-d` is Make's own debug flag.
+
+The image still listens on 8080 and 8081. On the host those are 18080 (API) and 18081 (admin), so a local `make run` can keep 8080 and 8081. The database file is `/app/data/steward.db` inside the container. It remains across `docker stop` and `docker start`. A new container starts with an empty database.
 
 ```bash
-STEWARD_MASTER_KEY="..." make up
+STEWARD_MASTER_KEY="..." make run-d
 ```
 
 `make image` builds the image without starting it.
@@ -51,7 +53,7 @@ load_env()
 
 ## How it works
 
-- **Admin UI** — manage secrets, grants, and audit entries.
+- **Admin UI** — manage secrets, grants, and audit entries. Import .env on the Secrets page stores each pasted `KEY=value` line, including the quoted values that `/secrets.env` returns. Comments and `export` are allowed. A bad line is reported by number and nothing is saved. An existing name keeps its note and takes the new value.
 - **API** — issue the secrets a grant allows, as `.env`, JSON, or YAML.
 
 A grant token is shown once when the grant is created and is not stored; only its hash is kept. Secret values are Fernet-encrypted with `STEWARD_MASTER_KEY`.

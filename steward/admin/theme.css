@@ -163,6 +163,22 @@ body.desktop .q-btn.q-focusable:focus > .q-focus-helper:after {
   gap: 12px;
 }
 .secret-inline .q-field { width: 100%; }
+.new-secret {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr) minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+}
+.new-secret .q-field { min-width: 0; }
+.new-secret .q-field__append .q-icon { font-size: 16px; }
+.new-secret .q-field__control,
+html body .new-secret button.q-btn.bg-primary,
+html body .new-secret button.q-btn.q-btn--flat:not(.q-btn--round) {
+  height: 40px;
+  min-height: 40px;
+  border-radius: 8px;
+}
 .grant-fields {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
@@ -226,4 +242,14 @@ html body button.q-btn.secret-delete .block {
   color: #ff8866 !important;
   -webkit-text-fill-color: #ff8866 !important;
   border-color: #ff8866 !important;
+}
+.q-dialog .q-card.paste-dialog {
+  width: min(720px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px);
+}
+.paste-source .q-field__native {
+  min-height: 320px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13px;
+  line-height: 20px;
 }

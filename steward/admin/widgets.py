@@ -55,6 +55,24 @@ def readonly_dialog(title: str, value: str, *, hint: str = "") -> None:
     dialog.open()
 
 
+def paste_dialog(title: str, on_save: Callable[[str], Awaitable[bool]], *, placeholder: str = "") -> None:
+    """Open a dialog with a large text field. It closes when on_save returns True."""
+    with ui.dialog() as dialog, ui.card().classes("p-4 gap-3 paste-dialog"):
+        with ui.row().classes("dialog-head"):
+            ui.label(title).classes("page-title")
+            ui.button(icon="close", on_click=dialog.close).props(QUIET).classes("dialog-close")
+        source = ui.textarea(placeholder=placeholder).props("outlined dark spellcheck=false").classes("w-full paste-source")
+
+        async def save() -> None:
+            if await on_save(source.value or ""):
+                dialog.close()
+
+        with ui.row():
+            ui.button("Save", on_click=save)
+            ui.button("Cancel", on_click=dialog.close).props(QUIET)
+    dialog.open()
+
+
 def confirm_delete(title: str, on_yes: Callable[[], Awaitable[None]], *, hint: str = "") -> None:
     """Open a dialog that calls on_yes only after Delete."""
     with ui.dialog() as dialog, ui.card().classes("p-4 gap-3"):

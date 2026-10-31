@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse, Response
 
 from steward.api.dependencies import available
-from steward.api.formats import to_env, to_json, to_yaml
+from steward.formats import to_env, to_json, to_yaml
 
 router = APIRouter(tags=["secrets"])
 
